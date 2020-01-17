@@ -58,6 +58,13 @@ struct protocol_t : public payload::LoadToDiskTranslator<struct protocol_t >  {
     const char **_extendedMethodTypes;
     const char *_demangledName;
     property_list_t *_classProperties;
+
+    const char * GetName() {
+        auto clsDisk = this->disk();
+        auto name = clsDisk->mangledName;
+        if (name == nullptr) { return NULL; }
+        return name->disk();
+    }
 };
 
 typedef struct protocol_list : public payload::LoadToDiskTranslator<struct protocol_list>  {

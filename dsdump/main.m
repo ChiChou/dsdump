@@ -34,6 +34,7 @@ static void handle_args(int argc, const char * argv[]);
  *******************************************************************************/
 
 int main(int argc, const char * argv[], const char*envp[]) {
+#if 0
     handle_args(argc, argv);
     if (argc < 2) {
         print_usage();
@@ -72,11 +73,27 @@ int main(int argc, const char * argv[], const char*envp[]) {
         [image dumpSymbols];
     }
     
-
+#endif
+#if DEBUG
+    NSString *path = @"/System/Library/PrivateFrameworks/SecureChannel.framework/securechanneld";
+//    NSString *path = @"/System/Library/PrivateFrameworks/SoftwareUpdate.framework/Versions/A/XPCServices/ManualProductStasherService.xpc/Contents/MacOS/ManualProductStasherService";
+//
+#else
+    NSArray *args = [[NSProcessInfo processInfo] arguments];
+    if (args.count < 2) {
+        printf("filename please\n");
+        return -1;
+    }
+    NSString *path = args[1];
+#endif
     
+    XRMachOLibrary *image = [[XRMachOLibrary alloc] initWithPath:[path stringByStandardizingPath]];
+    xref_options.verbose = VERBOSE_5;
+    [image work];
     return 0;
 }
 
+#if 0
 
 static void handle_args(int argc, const char * argv[]) {
     while (1) {
@@ -200,3 +217,5 @@ static void handle_args(int argc, const char * argv[]) {
         xref_options.symbol_mode = 1;
     }
 }
+
+#endif

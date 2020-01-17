@@ -47,6 +47,42 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
                              };
 }
 
+- (NSArray<NSDictionary*>*)methodsForName:(const char *)name resolvedAddress:(swift_class*)cls {
+    auto rodata = cls->disk()->rodata();
+    if (rodata == nullptr) {
+        return nil;
+    }
+    
+    auto methodList = rodata->disk()->baseMethodList;
+    if (methodList == nullptr) {
+        return nil;
+    }
+    
+    uint8_t isMeta = rodata->disk()->flags & RO_META ? 1 : 0 ;
+    auto count = methodList->disk()->count;
+    auto methods = &methodList->disk()->first_method;
+    
+    auto result = [[NSMutableArray alloc] init];
+    for (int i = 0; i < count; i++) {
+        auto method = methods[i];
+        auto methodAddress = method.imp->strip_PAC();
+        auto methodName = method.name->disk();
+        auto nameString = [NSString stringWithUTF8String:methodName];
+        if (blacklistedSelectors[nameString]) {
+            continue;
+        }
+        
+        NSDictionary *item = @{
+            @"name": [NSString stringWithFormat:@"%c %@", "-+"[isMeta], nameString],
+            @"address": [NSNumber numberWithUnsignedLong:methodAddress],
+        };
+            
+        [result addObject:item];
+    }
+
+    return result;
+}
+
 - (void)dumpObjCClassInfo:(const char *)name resolvedAddress:(swift_class*)cls {
     auto rodata = cls->disk()->rodata();
     if (rodata == nullptr) {
@@ -161,6 +197,141 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
     }
     
     printf("}\n");
+}
+
+- (NSMutableArray<NSDictionary *>*) clazzInfo {
+    struct section_64* classSection = payload::sectionsDict["__DATA.__objc_classlist"];
+    if (classSection == nullptr) { // iOS 13 ARM64E has some changes...
+        classSection = payload::sectionsDict["__DATA_CONST.__objc_classlist"];
+    }
+    if (classSection == nullptr) {
+        return nil;
+    }
+    
+    auto classes = payload::LoadToDiskTranslator<uintptr_t>::Cast(classSection->addr);
+    NSMutableArray<NSDictionary *> *result = [[NSMutableArray alloc] init];
+    
+//    char modname[1024];
+    for (int i = 0; i < classSection->size / PTR_SIZE; i++) {
+        auto resolvedAddress = classes->Get(i);
+        auto cls = payload::Cast<swift_class*>(resolvedAddress);
+        const char *name = cls->GetName();
+        const char *demangledName;
+//        d_offsets off;
+        std::string demangleduBuffer;
+        if (cls->isSwift()) {
+            dshelpers::simple_demangle(name, demangleduBuffer);
+            demangledName = demangleduBuffer.c_str();
+        } else {
+            demangledName = name;
+        }
+        
+        NSMutableDictionary *item = [[NSMutableDictionary alloc] init];
+        [item addEntriesFromDictionary:@{
+            @"address": [NSNumber numberWithUnsignedLong:resolvedAddress],
+            @"name": [NSString stringWithUTF8String:demangledName]
+        }];
+        
+        NSArray *protocols = [self protocolsForClazz:cls];
+        if (protocols) {
+            item[ @"protocols"] = protocols;
+        }
+        
+//        XRBindSymbol *objcReference = nil;
+
+        auto metaCls = cls->disk()->isa();
+        auto classMethods = [self methodsForName:name resolvedAddress:metaCls];
+        auto instanceMehtods = [self methodsForName:name resolvedAddress:cls];
+
+        auto allMethods = [[NSMutableArray alloc] init];
+        [allMethods addObjectsFromArray:classMethods];
+        [allMethods addObjectsFromArray:instanceMehtods];
+        item[@"methods"] = allMethods;
+        
+        [result addObject:item];
+    }
+    return result;
+}
+
+- (NSArray *) protocolInfo {
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    struct section_64* protoSection = payload::sectionsDict["__DATA.__objc_protolist"];
+    if (protoSection == nullptr) {
+        protoSection = payload::sectionsDict["__DATA_CONST.__objc_protolist"];
+    }
+
+    if (protoSection == nullptr) {
+        return nil;
+    }
+
+    auto protocols = payload::LoadToDiskTranslator<protocol_list_t*>::Cast(protoSection->addr);
+    for (int i = 0; i < protoSection->size / PTR_SIZE; i++) {
+        auto resolvedAddress = protocols->Get(i);
+        auto proto = payload::Cast<protocol_t*>(resolvedAddress);
+        auto name = proto->GetName();
+
+//        auto ancestors = proto->disk()->protocols;
+//        if (ancestors) {
+//            auto count = ancestors->disk()->count;
+//            auto protocols = &ancestors->disk()->first_protocol;
+//            for (int j = 0; j < count; j++) {
+//                auto prot = protocols[j];
+//                auto mangledName = prot->disk()->mangledName->disk();
+//                printf("> %s\n", mangledName);
+//            }
+//        }
+        
+        auto allMethods = [[NSMutableArray alloc] init];
+        auto classMethods = [self methodsForProtocol:proto->disk()->classMethods classMethod:YES];
+        auto instanceMethods = [self methodsForProtocol:proto->disk()->instanceMethods classMethod:NO];
+        [allMethods addObjectsFromArray:classMethods];
+        [allMethods addObjectsFromArray:instanceMethods];
+        
+        [result addObject:@{
+            @"name": [NSString stringWithUTF8String:name],
+            @"methods": allMethods
+        }];
+    }
+
+    return [result copy];
+}
+
+- (void)dumpIDAInfo {
+    NSDictionary *data = @{
+        @"classes": [self clazzInfo],
+        @"protocols": [self protocolInfo]
+    };
+
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:data
+                                                       options:NSJSONWritingPrettyPrinted
+                                                         error:&error];
+    NSString *str = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    printf("%s", str.UTF8String);
+}
+
+- (NSArray *)methodsForProtocol:(method_list_t *)methodsList classMethod:(BOOL)isClassMethod {
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (methodsList == nullptr) {
+        return nil;
+    }
+    auto methodsListDisk = methodsList->disk();
+    if (methodsListDisk == nullptr) {
+        return nil;
+    }
+    auto count = methodsListDisk->count;
+    auto methods = &methodsListDisk->first_method;
+    auto c = isClassMethod ? '+' : '-';
+
+    for (int j = 0; j < count; j++) {
+        auto method = methods[j];
+        auto methodName = method.name->disk();
+        [result addObject:@{
+            @"name": [NSString stringWithFormat:@"%c %s", c, methodName],
+            @"types": [NSString stringWithUTF8String:method.types->disk()],
+        }];
+    }
+    return result;
 }
 
 /********************************************************************************
@@ -378,6 +549,33 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
         dumpCategoryMethods(category->disk()->instanceMethods, false);
         
     }
+}
+
+-(NSArray *)protocolsForClazz:(swift_class*)cls {
+    auto rodata = cls->disk()->rodata();
+    if (rodata == nullptr) {
+        return nil;
+    }
+    
+    auto protocolList = rodata->disk()->baseProtocols;
+    if (protocolList == nullptr) {
+        return nil;
+    }
+    
+    auto count = protocolList->disk()->count;
+    if (count == 0) {
+        return nil;
+    }
+    
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    auto protocols = &protocolList->disk()->first_protocol;
+    for (int i = 0; i < count; i++) {
+        auto prot = protocols[i];
+        auto mangledName = prot->disk()->mangledName->disk();
+        [result addObject:[NSString stringWithUTF8String:mangledName]];
+    }
+
+    return result;
 }
 
 /********************************************************************************
