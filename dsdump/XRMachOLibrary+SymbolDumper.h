@@ -24,7 +24,7 @@ void print_symbol(XRMachOLibrary *object, struct nlist_64 * _Nonnull sym, uintpt
 
 @interface XRMachOLibrary (SymbolDumper)
 
-- (void)work;
+- (NSString *)work;
 - (void)dumpSymbols;
 - (void)dumpExternalSymbols;
 - (XRBindSymbol *)objCSuperClassFromSymbol:(struct nlist_64 * _Nonnull)sym;

@@ -15,12 +15,12 @@
 @implementation XRMachOLibrary (SymbolDumper)
 
 
-- (void)work {
+- (NSString *)work {
     if ([self preparseSwiftTypes]) {
         [self preparseSwiftProtocols];
     }
 
-    [self dumpIDAInfo];
+    return [self dumpIDAInfo];
 }
 
 - (void)dumpSymbols {

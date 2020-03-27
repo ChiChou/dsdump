@@ -31,7 +31,7 @@ BOOL demangleSwiftName(const char *name, d_offsets *f);
 
 @interface XRMachOLibrary (ObjectiveC)
 
-- (void)dumpIDAInfo;
+- (NSString *)dumpIDAInfo;
 - (void)dumpObjectiveCClasses;
 - (void)dumpObjectiveCCategories;
 

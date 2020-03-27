@@ -52,7 +52,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "${BUILD_DIR}/Debug/dsdump -vvvvv --swift"
+            argument = "/usr/libexec/autofsd"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

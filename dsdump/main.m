@@ -34,6 +34,8 @@ static void handle_args(int argc, const char * argv[]);
  *******************************************************************************/
 
 int main(int argc, const char * argv[], const char*envp[]) {
+    @autoreleasepool {
+        
 #if 0
     handle_args(argc, argv);
     if (argc < 2) {
@@ -74,22 +76,34 @@ int main(int argc, const char * argv[], const char*envp[]) {
     }
     
 #endif
-#if DEBUG
+
+#if 0
     NSString *path = @"/System/Library/PrivateFrameworks/SecureChannel.framework/securechanneld";
 //    NSString *path = @"/System/Library/PrivateFrameworks/SoftwareUpdate.framework/Versions/A/XPCServices/ManualProductStasherService.xpc/Contents/MacOS/ManualProductStasherService";
 //
 #else
-    NSArray *args = [[NSProcessInfo processInfo] arguments];
-    if (args.count < 2) {
-        printf("filename please\n");
-        return -1;
-    }
-    NSString *path = args[1];
+        NSString *output = nil;
+        NSArray *args = [[NSProcessInfo processInfo] arguments];
+        if (argc < 2) {
+            fprintf(stderr, "filename please\n");
+            return -1;
+        }
+
+        if (argc == 3) {
+            output = args[2];
+        }
+        
+        NSString *path = args[1];
 #endif
-    
-    XRMachOLibrary *image = [[XRMachOLibrary alloc] initWithPath:[path stringByStandardizingPath]];
-    xref_options.verbose = VERBOSE_5;
-    [image work];
+        XRMachOLibrary *image = [[XRMachOLibrary alloc] initWithPath:[path stringByStandardizingPath]];
+        xref_options.verbose = VERBOSE_5;
+        NSString *result = [image work];
+        if (output) {
+            [result writeToFile:output atomically:YES encoding:kCFStringEncodingUTF8 error:nil];
+        } else {
+            puts(result.UTF8String);
+        }
+    }
     return 0;
 }
 

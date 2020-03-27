@@ -205,7 +205,7 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
         classSection = payload::sectionsDict["__DATA_CONST.__objc_classlist"];
     }
     if (classSection == nullptr) {
-        return nil;
+        return @[];
     }
     
     auto classes = payload::LoadToDiskTranslator<uintptr_t>::Cast(classSection->addr);
@@ -261,7 +261,7 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
     }
 
     if (protoSection == nullptr) {
-        return nil;
+        return @[];
     }
 
     auto protocols = payload::LoadToDiskTranslator<protocol_list_t*>::Cast(protoSection->addr);
@@ -296,7 +296,7 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
     return [result copy];
 }
 
-- (void)dumpIDAInfo {
+- (NSString *)dumpIDAInfo {
     NSDictionary *data = @{
         @"classes": [self clazzInfo],
         @"protocols": [self protocolInfo]
@@ -307,7 +307,7 @@ static NSDictionary <NSString*, NSNumber*> *blacklistedSelectors = nil;
                                                        options:NSJSONWritingPrettyPrinted
                                                          error:&error];
     NSString *str = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-    printf("%s", str.UTF8String);
+    return str;
 }
 
 - (NSArray *)methodsForProtocol:(method_list_t *)methodsList classMethod:(BOOL)isClassMethod {
